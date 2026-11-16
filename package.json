@@ -1,0 +1,15 @@
+{
+  "name": "rolling-news-archive",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Offline-replayable rolling news feed intake and archive service",
+  "engines": {
+    "node": "22.23.4"
+  },
+  "scripts": {
+    "test": "node --experimental-sqlite --test tests/unit/*.test.js tests/integration/*.test.js",
+    "build": "node scripts/check-syntax.js",
+    "demo": "node --experimental-sqlite src/cli.js demo fixtures/rolling-feed.html"
+  }
+}
