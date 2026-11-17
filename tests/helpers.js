@@ -46,3 +46,28 @@ export const baseFeed = {
 export function captureTime(second) {
   return `2026-11-16T02:00:${String(second).padStart(2, "0")}.000Z`;
 }
+
+// Deterministic, externally advanced clock for pause/back-off tests. Time only
+// moves when a test advances it, so restart, probe-expiry and late-result
+// scenarios are reproducible without real timers.
+export class ManualClock {
+  constructor(initial = "2026-11-16T02:00:00.000Z") {
+    this.current = new Date(initial);
+  }
+
+  now() {
+    return new Date(this.current.getTime());
+  }
+
+  advance(ms) {
+    this.current = new Date(this.current.getTime() + ms);
+    return this.now();
+  }
+}
+
+// Short, deterministic pause budgets so tests never wait on real wall time.
+export const fastPausePolicy = Object.freeze({
+  rate_limited: { baseMs: 1_000, maxMs: 8_000, factor: 2, requiresManual: false },
+  transient: { baseMs: 500, maxMs: 4_000, factor: 2, requiresManual: false },
+  unavailable: { baseMs: 60_000, maxMs: 60_000, factor: 1, requiresManual: true }
+});

@@ -42,7 +42,7 @@ test("calculates accepted attempt rate and fresh status using the injected clock
   assert.equal(report.status, "healthy");
   assert.equal(report.freshness, "fresh");
   assert.equal(report.successRate, 0.8);
-  assert.deepEqual(report.totals, { attempts: 5, accepted: 4, rejected: 0, failed: 0, notModified: 1 });
+  assert.deepEqual(report.totals, { attempts: 5, accepted: 4, rejected: 0, failed: 0, notModified: 1, skipped: 0 });
   assert.deepEqual(report.issues, []);
 });
 

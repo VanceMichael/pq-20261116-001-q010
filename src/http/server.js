@@ -56,8 +56,26 @@ async function routeRequest(request, response, archive) {
   }
   if (segments.length === 4 && segments[3] === "refresh" && request.method === "POST") {
     const result = await archive.refreshFeed(feedId);
+    if (result.outcome === "skipped") {
+      const headers = result.retryAfterMs !== null && result.retryAfterMs !== undefined
+        ? { "Retry-After": String(Math.max(1, Math.ceil(result.retryAfterMs / 1000))) }
+        : undefined;
+      return writeJson(response, 503, result, headers);
+    }
     const status = result.outcome === "accepted" ? result.capture.replay ? 200 : 202 : result.outcome === "not_modified" ? 200 : 422;
     return writeJson(response, status, result);
+  }
+  if (segments.length === 4 && segments[3] === "pause" && request.method === "GET") {
+    const result = archive.feedPause(feedId);
+    return result ? writeJson(response, 200, { pause: result }) : notFound(response);
+  }
+  if (segments.length === 4 && segments[3] === "pause" && request.method === "POST") {
+    const result = archive.resumeFeed(feedId, await readJson(request));
+    return writeJson(response, result.status, result);
+  }
+  if (segments.length === 4 && segments[3] === "pause-events" && request.method === "GET") {
+    const result = archive.pauseEvents(feedId, url.searchParams.get("limit"));
+    return result ? writeJson(response, 200, { events: result }) : notFound(response);
   }
   if (segments.length === 3 && request.method === "GET") {
     const result = archive.feedStatus(feedId);
@@ -160,10 +178,14 @@ function notFound(response) {
   return writeJson(response, 404, { error: "not_found", message: "resource or route not found" });
 }
 
-function writeJson(response, status, value) {
+function writeJson(response, status, value, extraHeaders = undefined) {
   if (response.writableEnded) return;
   const body = JSON.stringify(value);
-  response.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Content-Length": Buffer.byteLength(body) });
+  response.writeHead(status, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Content-Length": Buffer.byteLength(body),
+    ...(extraHeaders ?? {})
+  });
   response.end(body);
 }
 

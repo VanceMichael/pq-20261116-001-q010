@@ -58,7 +58,8 @@ export class PageFetcher {
       }
       if (!response.ok) {
         throw Object.assign(fetchError("http_status", `source returned HTTP ${response.status}`, response.status), {
-          attemptCount: response.attemptCount
+          attemptCount: response.attemptCount,
+          retryAfterMs: response.retryAfterMs ?? null
         });
       }
       const contentType = response.headers.get("content-type") ?? "";
@@ -73,6 +74,7 @@ export class PageFetcher {
 
   async requestWithRetry(url) {
     let lastError;
+    let retryAfterMs = null;
     for (let attempt = 1; attempt <= this.maxAttempts; attempt += 1) {
       try {
         const response = await this.fetchImpl(url.href, {
@@ -82,12 +84,15 @@ export class PageFetcher {
           signal: AbortSignal.timeout(this.timeoutMs)
         });
         if (!RETRYABLE_STATUS.has(response.status) || attempt === this.maxAttempts) {
+          if (RETRYABLE_STATUS.has(response.status)) {
+            retryAfterMs = parseRetryAfter(response.headers.get("retry-after"), this.now()) ?? retryAfterMs;
+          }
           return { status: response.status, headers: response.headers, ok: response.ok,
-            body: response.body, attemptCount: attempt };
+            body: response.body, attemptCount: attempt, retryAfterMs };
         }
-        const retryAfter = parseRetryAfter(response.headers.get("retry-after"), this.now());
+        retryAfterMs = parseRetryAfter(response.headers.get("retry-after"), this.now()) ?? retryAfterMs;
         await response.body?.cancel();
-        await this.sleep(retryAfter ?? this.backoffBaseMs * 2 ** (attempt - 1));
+        await this.sleep(retryAfterMs ?? this.backoffBaseMs * 2 ** (attempt - 1));
       } catch (error) {
         lastError = error;
         if (error.code && error.code !== "fetch_failed") throw error;
@@ -96,7 +101,8 @@ export class PageFetcher {
       }
     }
     throw Object.assign(fetchError("fetch_failed", lastError?.message ?? "source request failed"), {
-      attemptCount: this.maxAttempts
+      attemptCount: this.maxAttempts,
+      retryAfterMs
     });
   }
 }

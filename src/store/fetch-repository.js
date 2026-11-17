@@ -3,16 +3,17 @@ export class FetchRepository {
     this.database = database;
     this.insert = database.prepare(`INSERT INTO fetch_attempts
       (feed_id, started_at, finished_at, outcome, http_status, attempt_count, requested_url,
-       final_url, capture_id, error_code, error_message)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+       final_url, capture_id, error_code, error_message, pause_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     this.listQuery = database.prepare(`SELECT attempt_id, feed_id, started_at, finished_at, outcome,
-      http_status, attempt_count, requested_url, final_url, capture_id, error_code, error_message
+      http_status, attempt_count, requested_url, final_url, capture_id, error_code, error_message, pause_id
       FROM fetch_attempts WHERE feed_id=? ORDER BY attempt_id DESC LIMIT ?`);
     this.summaryQuery = database.prepare(`SELECT COUNT(*) AS total,
       SUM(CASE WHEN outcome='accepted' THEN 1 ELSE 0 END) AS accepted,
       SUM(CASE WHEN outcome='rejected' THEN 1 ELSE 0 END) AS rejected,
       SUM(CASE WHEN outcome='failed' THEN 1 ELSE 0 END) AS failed,
       SUM(CASE WHEN outcome='not_modified' THEN 1 ELSE 0 END) AS not_modified,
+      SUM(CASE WHEN outcome='skipped' THEN 1 ELSE 0 END) AS skipped,
       MAX(CASE WHEN outcome='accepted' THEN finished_at END) AS last_success_at,
       MAX(finished_at) AS last_attempt_at
       FROM fetch_attempts WHERE feed_id=? AND finished_at>=?`);
@@ -21,7 +22,7 @@ export class FetchRepository {
   record(attempt) {
     const result = this.insert.run(attempt.feedId, attempt.startedAt, attempt.finishedAt, attempt.outcome,
       attempt.httpStatus, attempt.attemptCount, attempt.requestedUrl, attempt.finalUrl,
-      attempt.captureId, attempt.errorCode, attempt.errorMessage);
+      attempt.captureId, attempt.errorCode, attempt.errorMessage, attempt.pauseId ?? null);
     return Number(result.lastInsertRowid);
   }
 
@@ -38,6 +39,7 @@ export class FetchRepository {
       rejected: result.rejected ?? 0,
       failed: result.failed ?? 0,
       notModified: result.not_modified ?? 0,
+      skipped: result.skipped ?? 0,
       lastSuccessAt: result.last_success_at,
       lastAttemptAt: result.last_attempt_at
     };
@@ -57,6 +59,7 @@ function mapAttempt(row) {
     finalUrl: row.final_url,
     captureId: row.capture_id,
     errorCode: row.error_code,
-    errorMessage: row.error_message
+    errorMessage: row.error_message,
+    pauseId: row.pause_id
   };
 }

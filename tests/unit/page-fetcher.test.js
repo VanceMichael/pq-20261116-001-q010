@@ -99,6 +99,36 @@ test("does not retry permanent HTTP errors and preserves status diagnostics", as
   assert.equal(calls, 1);
 });
 
+test("surfaces the bounded Retry-After hint on an exhausted rate-limit response", async () => {
+  let calls = 0;
+  const fetcher = new PageFetcher({
+    maxAttempts: 1,
+    fetchImpl: async () => { calls += 1; return new Response("slow down", { status: 429, headers: { "retry-after": "5" } }); }
+  });
+  await assert.rejects(fetcher.fetchFeed(feed), (error) => {
+    assert.equal(error.code, "http_status");
+    assert.equal(error.status, 429);
+    assert.equal(error.retryAfterMs, 5000);
+    return true;
+  });
+  assert.equal(calls, 1);
+});
+
+test("keeps the latest Retry-After hint when several retries are exhausted", async () => {
+  let calls = 0;
+  const fetcher = new PageFetcher({
+    maxAttempts: 2,
+    backoffBaseMs: 1,
+    sleep: async () => {},
+    fetchImpl: async () => {
+      calls += 1;
+      return new Response("busy", { status: 503, headers: { "retry-after": calls === 1 ? "1" : "3" } });
+    }
+  });
+  await assert.rejects(fetcher.fetchFeed(feed), { code: "http_status", status: 503, retryAfterMs: 3000 });
+  assert.equal(calls, 2);
+});
+
 test("rejects non-HTML responses and bodies exceeding the configured cap", async () => {
   const nonHtml = new PageFetcher({ fetchImpl: async () => new Response("{}", { headers: { "content-type": "application/json" } }) });
   await assert.rejects(nonHtml.fetchFeed(feed), { code: "content_type" });
